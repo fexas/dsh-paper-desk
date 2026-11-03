@@ -3,6 +3,7 @@ import TYPERT_REMOTE from './contracts';
 import { makeApi, isChineseLocale } from './api';
 import { PaperDeskApp } from './App';
 import styles from './styles.css';
+import flowCss from '@xyflow/react/dist/style.css';
 import katexCss from 'virtual:katex-css';
 
 const PANEL_ID = 'paper-desk';
@@ -46,7 +47,7 @@ function PaperDeskIcon({ size = 18, active = false }) {
 async function apply(ctx) {
   const style = document.createElement('style');
   style.dataset.plugin = 'dsh-paper-desk';
-  style.textContent = `${katexCss}\n${styles}`;
+  style.textContent = `${katexCss}\n${flowCss}\n${styles}`;
   for (const old of document.head.querySelectorAll('style[data-plugin="dsh-paper-desk"]')) old.remove();
   document.head.appendChild(style);
   ctx.effect(() => () => style.remove(), 'paper-desk: styles');
@@ -70,7 +71,7 @@ async function apply(ctx) {
 
     // Confirms the browser half and the Host Remote namespace are both live;
     // the Host records a tiny diagnostic marker under projects/.
-    void api.clientReady('1.1.0').catch(() => {});
+    void api.clientReady('1.2.0').catch(() => {});
   });
 
   return async () => {

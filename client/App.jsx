@@ -16,12 +16,15 @@ import {
   CircleAlert,
   Copy,
   FileText,
+  FlaskConical,
   FolderOpen,
+  GraduationCap,
   Highlighter,
   Languages,
   Loader2,
   MessageSquare,
   MoreHorizontal,
+  Network,
   NotebookPen,
   Paperclip,
   Pencil,
@@ -35,6 +38,7 @@ import {
   X,
 } from 'lucide-react';
 import { PdfViewer, COLORS } from './PdfViewer';
+import { MindMapPage } from './MindMapPage';
 import { analyzePdfFile, metadataFacts } from './pdf';
 import { renderMarkdown, plainText } from './markdown';
 import {
@@ -124,6 +128,84 @@ function PromptDialog({ title, label, defaultValue = '', placeholder, confirmLab
       <div className="pd-modal-actions">
         <button type="button" className="pd-btn pd-btn-ghost" onClick={onCancel}>取消</button>
         <button type="button" className="pd-btn pd-btn-primary" onClick={submit} disabled={!value.trim()}>{confirmLabel || '保存'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+const PROJECT_TYPES = {
+  research: {
+    label: '研究型',
+    short: 'Research',
+    description: '找问题、提出方法、比较 baseline / benchmark，推进一个研究想法。',
+    icon: <FlaskConical size={18} />,
+  },
+  learning: {
+    label: '学习型',
+    short: 'Learning',
+    description: '梳理概念依赖、发展脉络、必读论文和复习练习，真正掌握一个方向。',
+    icon: <GraduationCap size={18} />,
+  },
+};
+
+function ProjectTypeBadge({ type, small = false }) {
+  const meta = PROJECT_TYPES[type] || PROJECT_TYPES.research;
+  return (
+    <span className={`pd-type-badge pd-type-${type || 'research'} ${small ? 'is-small' : ''}`}>
+      {meta.icon}{meta.label}
+    </span>
+  );
+}
+
+function ProjectCreateDialog({ onCancel, onConfirm }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('research');
+  const inputRef = useRef(null);
+  useEffect(() => { const id = window.setTimeout(() => inputRef.current?.focus(), 40); return () => window.clearTimeout(id); }, []);
+  const submit = () => {
+    if (!name.trim()) return;
+    onConfirm(name.trim(), type);
+  };
+  return (
+    <Modal title="新建论文项目" onClose={onCancel} width={540}>
+      <div className="pd-modal-body pd-form">
+        <label className="pd-field">
+          <span>项目名称</span>
+          <input
+            ref={inputRef}
+            value={name}
+            placeholder="例如 scaling inference for SBI"
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') submit(); }}
+          />
+        </label>
+        <div className="pd-field">
+          <span>这个项目主要用来做什么？</span>
+          <div className="pd-project-type-grid">
+            {Object.entries(PROJECT_TYPES).map(([value, meta]) => (
+              <button
+                key={value}
+                type="button"
+                className={`pd-project-type-card ${type === value ? 'is-active' : ''}`}
+                onClick={() => setType(value)}
+              >
+                <span className="pd-project-type-icon">{meta.icon}</span>
+                <span className="pd-project-type-copy">
+                  <strong>{meta.label}<small>{meta.short}</small></strong>
+                  <em>{meta.description}</em>
+                </span>
+                <span className="pd-project-type-check">{type === value ? <Check size={14} /> : null}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="pd-hint">项目类型决定脑图的初始模板；之后仍然可以自由增删节点和连线。</p>
+      </div>
+      <div className="pd-modal-actions">
+        <button type="button" className="pd-btn pd-btn-ghost" onClick={onCancel}>取消</button>
+        <button type="button" className="pd-btn pd-btn-primary" onClick={submit} disabled={!name.trim()}>
+          <Plus size={14} />创建项目
+        </button>
       </div>
     </Modal>
   );
@@ -243,7 +325,7 @@ function ProjectCard({ project, onOpen, onRename, onDelete }) {
         </div>
       </div>
       <h3>{project.name}</h3>
-      <div className="pd-project-folder"><FolderOpen size={12} />{project.folder}</div>
+      <div className="pd-project-folder"><FolderOpen size={12} />{project.folder}<ProjectTypeBadge type={project.type} small /></div>
       <div className="pd-project-tags">
         {project.tags.slice(0, 4).map((tag) => <TagPill key={tag.name} tag={tag.name} />)}
         {project.tags.length > 4 && <span className="pd-tag-more">+{project.tags.length - 4}</span>}
@@ -293,9 +375,9 @@ function ProjectsPage({ api, notify, onOpenProject }) {
     return projects.filter((project) => `${project.name} ${project.tags.map((tag) => tag.name).join(' ')}`.toLowerCase().includes(needle));
   }, [projects, query]);
 
-  const create = async (name) => {
+  const create = async (name, type) => {
     try {
-      const project = await api.createProject(name);
+      const project = await api.createProject(name, type);
       setDialog(null);
       notify('项目已创建', 'success');
       await load();
@@ -392,11 +474,7 @@ function ProjectsPage({ api, notify, onOpenProject }) {
       )}
 
       {dialog?.type === 'create' && (
-        <PromptDialog
-          title="新建论文项目"
-          label="项目名称"
-          placeholder="scaling inference for SBI"
-          confirmLabel="创建项目"
+        <ProjectCreateDialog
           onCancel={() => setDialog(null)}
           onConfirm={create}
         />
@@ -646,7 +724,7 @@ function PaperEditDialog({ paper, onCancel, onSave }) {
   );
 }
 
-function ProjectPage({ api, projectId, notify, onBack, onOpenReader }) {
+function ProjectPage({ api, projectId, notify, onBack, onOpenReader, onOpenMap }) {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -904,6 +982,7 @@ function ProjectPage({ api, projectId, notify, onBack, onOpenReader }) {
             <div className="pd-project-subline">
               {project && (
                 <>
+                  <ProjectTypeBadge type={project.type} />
                   <span><FileText size={13} />{project.paperCount} 篇论文</span>
                   <span><Sparkles size={13} />{project.notesCount} 篇 AI 精读</span>
                   <span><Tag size={13} />{project.tags.length} 个标签</span>
@@ -913,6 +992,9 @@ function ProjectPage({ api, projectId, notify, onBack, onOpenReader }) {
             </div>
           </div>
           <div className="pd-project-header-actions">
+            <button type="button" className="pd-btn pd-btn-secondary" onClick={() => onOpenMap?.()} disabled={!project}>
+              <Network size={15} />项目脑图
+            </button>
             <button type="button" className="pd-btn pd-btn-secondary" onClick={() => openFilePicker({ kind: 'paper' })} disabled={!project}>
               <Upload size={15} />导入 PDF
             </button>
@@ -922,6 +1004,15 @@ function ProjectPage({ api, projectId, notify, onBack, onOpenReader }) {
           </div>
         </div>
       </header>
+
+      <button type="button" className="pd-map-entry" onClick={() => onOpenMap?.()} disabled={!project}>
+        <span className="pd-map-entry-icon"><Network size={20} /></span>
+        <span className="pd-map-entry-copy">
+          <strong>项目脑图</strong>
+          <span>{project?.type === 'learning' ? '把概念、发展脉络、必读论文和复习练习连成一张学习地图。' : '把 motivating example、方法、评估和论文连成一张研究论证图。'}</span>
+        </span>
+        <span className="pd-map-entry-meta">{project?.type === 'learning' ? 'LEARNING MAP' : 'RESEARCH MAP'} <ChevronRight size={15} /></span>
+      </button>
 
       <div className="pd-project-controls">
         <div className="pd-search pd-search-sm">
@@ -1862,7 +1953,18 @@ export function PaperDeskApp({ api }) {
           projectId={view.projectId}
           notify={notify}
           onBack={() => setView({ kind: 'projects' })}
-          onOpenReader={(paperId, tab) => setView({ kind: 'reader', projectId: view.projectId, paperId, tab })}
+          onOpenMap={() => setView({ kind: 'map', projectId: view.projectId })}
+          onOpenReader={(paperId, tab) => setView({ kind: 'reader', projectId: view.projectId, paperId, tab, from: 'project' })}
+        />
+      )}
+      {view.kind === 'map' && (
+        <MindMapPage
+          key={`map:${view.projectId}`}
+          api={api}
+          projectId={view.projectId}
+          notify={notify}
+          onBack={() => setView({ kind: 'project', projectId: view.projectId })}
+          onOpenReader={(paperId, tab = 'chat') => setView({ kind: 'reader', projectId: view.projectId, paperId, tab, from: 'map' })}
         />
       )}
       {view.kind === 'reader' && (
@@ -1873,7 +1975,7 @@ export function PaperDeskApp({ api }) {
           paperId={view.paperId}
           initialTab={view.tab}
           notify={notify}
-          onBack={() => setView({ kind: 'project', projectId: view.projectId })}
+          onBack={() => setView({ kind: view.from === 'map' ? 'map' : 'project', projectId: view.projectId })}
         />
       )}
       <ToastLayer toasts={toasts} onDismiss={dismiss} />
@@ -1885,4 +1987,4 @@ export default PaperDeskApp;
 
 
 // Internal pages are also exported for development harnesses.
-export { ProjectsPage, ProjectPage, ReaderPage, ChatPane, NotesPane, AnnotationsPane };
+export { ProjectsPage, ProjectPage, ReaderPage, ChatPane, NotesPane, AnnotationsPane, MindMapPage };

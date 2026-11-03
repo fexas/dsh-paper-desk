@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.0 — 2026-11-03
+
+- Added a persistent per-project mind map built on React Flow + dagre.
+- Added research and learning project types with different seeded templates.
+- Research map: motivating example / problem, methods framework, motivation,
+  superiority, evaluation, benchmarks and ablations.
+- Learning map: foundations, core concepts, timeline, paper queue and recall.
+- Added paper nodes with drag-and-drop from the project library, paper links on
+  any node, backlinks and Markdown/KaTeX content in nodes.
+- Added a three-pane map view: DSH sidebar, canvas, DeepSeek map chat / node
+  inspector.
+- Added map chat with whole-graph, paper-library and selected-node context.
+- Existing projects default to the research template; the SBI project was seeded.
+- Added generated and seeded map files to the project data folder.
+
 ## 1.1.0 — 2026-11-03
 
 - Added project library, Zotero-style paper folders and tag filtering.

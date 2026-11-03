@@ -54,7 +54,7 @@ const result = await esbuild.build({
   format: 'cjs',
   platform: 'browser',
   target: ['chrome120', 'safari16'],
-  external: ['react', 'react/jsx-runtime'],
+  external: ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client'],
   loader: {
     '.css': 'text',
     '.woff2': 'dataurl',

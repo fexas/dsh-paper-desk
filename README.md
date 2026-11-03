@@ -3,16 +3,22 @@
 [![build](https://github.com/fexas/dsh-paper-desk/actions/workflows/ci.yml/badge.svg)](https://github.com/fexas/dsh-paper-desk/actions/workflows/ci.yml)
 
 A Zotero-shaped paper desk for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
-It adds a **Papers** entry to the DSH sidebar and a three-pane reader to the
-main panel: the normal DSH sidebar on the left, the PDF in the middle, and a
-DeepSeek co-reading chat / Markdown notebook on the right.
+It adds a **Papers** entry to the DSH sidebar, a three-pane PDF reader and a
+per-project mind map: the normal DSH sidebar on the left, the document or canvas
+in the middle, and a DeepSeek chat / Markdown notebook on the right.
 
 > 本项目也适合中文用户：界面、AI 精读笔记和共读对话默认使用中文。
 
 ## Features
 
-- **Projects** — create a project such as *Scaling inference for SBI*. Each
-  project keeps its papers, tags, annotations, chats and notes together.
+- **Projects with a purpose** — choose **Research** (find a problem, build a
+  method, compare benchmarks) or **Learning** (build concept dependencies,
+  timeline, reading queue and recall exercises). Each project keeps papers,
+  tags, annotations, chats, notes and a mind map together.
+- **Project mind map** — one persistent React Flow canvas per project, with
+  drag-and-drop paper nodes, Markdown/KaTeX nodes, edges, backlinks, automatic
+  tidying and a DeepSeek map assistant. Research and learning projects start
+  from different templates.
 - **Drop PDFs in** — uploads, parses, and files PDFs into a Zotero-style folder
   (`Author et al. - Year - Title`). Title, authors and year are read from the
   PDF metadata and first page.
@@ -44,6 +50,8 @@ paper-desk/
   projects/
     scaling-inference-for-sbi/
       project.json
+      mindmap.json          # research or learning map
+      mindmap-chat.json     # project-level AI conversation
       papers/
         kuhmichel-et-al-2026-high-dimensional-simulation-based-inference/
           paper.pdf
@@ -123,11 +131,52 @@ DeepSeek chat + note UI                    chat.json, paper.txt
 ```
 
 - `client.js` is a single browser module built from `client/` with esbuild.
-  PDF.js and KaTeX fonts are bundled, so no CDN or extra asset route is needed.
+  PDF.js, KaTeX fonts and React Flow CSS are bundled, so no CDN or extra asset
+  route is needed.
 - The host exposes a small `paperDesk` Remote namespace. The browser never gets
   direct filesystem access.
 - Every paper is a directory with human-readable JSON/Markdown files; the UI can
   be removed without losing the research library.
+
+## Project mind map
+
+Every project has a single `mindmap.json`. Open it from the **项目脑图** banner or
+the header button in a project.
+
+### Templates
+
+- **Research** starts with:
+  - Motivating example / problem to solve
+  - Our methods: framework, motivation / key idea, and why it is superior
+  - How to evaluate performance: datasets/benchmarks, metrics, baselines/ablations
+- **Learning** starts with:
+  - Foundations and prerequisites
+  - Core concepts, examples and misconceptions
+  - Development timeline
+  - Paper queue
+  - Recall and exercises
+
+Templates are just seeded nodes. Every title, Markdown body and edge is editable,
+and **整理布局** runs a dagre layout for the current graph.
+
+### Linking papers and ideas
+
+Open **论文库**, then click or drag a paper onto the canvas. A paper node keeps
+a stable `paperId`; any node can also reference papers from the node inspector.
+The inspector shows incoming backlinks for the selected node, and clicking a
+paper chip opens its reader. This gives a lightweight Zettelkasten-style graph:
+papers, concepts, questions and experiments live in one canvas and connect in
+both directions.
+
+### Map chat
+
+The right pane switches between **对话** and **节点**:
+
+- **对话** sends the whole graph, the paper library metadata and (optionally)
+  the selected node to DeepSeek. The model is explicitly told this is a
+  research-strategy or learning-coach session, depending on the project type.
+- **节点** edits the selected node's title, type, Markdown body (with formulas),
+  linked papers and backlinks.
 
 ## Performance notes
 
@@ -152,9 +201,11 @@ Source layout:
 - `host/service.js` — projects, chunked uploads, annotations, notes, LLM calls
 - `client/App.jsx` — project library, paper rows, reader shell, chat and notes
 - `client/PdfViewer.jsx` — PDF.js canvas/text/highlight viewer
+- `client/MindMapPage.jsx` — React Flow canvas, paper tray, node inspector and map chat
 - `client/markdown.js` — Markdown + KaTeX formula rendering
 - `client/styles.css` — DSH-token-based UI styles
-- `build.mjs` — esbuild bundle, PDF.js worker embedding, inline KaTeX fonts
+- `host/mindmap.js` — research/learning templates and graph normalisation
+- `build.mjs` — esbuild bundle, PDF.js worker embedding, inline KaTeX fonts and React Flow CSS
 
 Pull requests are welcome. Please keep the UI on DSH theme tokens
 (`--dsw-alias-*`) and do not add a separate app shell, CDN dependency or a
@@ -172,5 +223,5 @@ second filesystem root.
 ## License
 
 MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-Bundled third-party code includes PDF.js (Apache-2.0), KaTeX (MIT), marked,
-DOMPurify and lucide.
+Bundled third-party code includes PDF.js (Apache-2.0), KaTeX (MIT), React Flow,
+dagre, marked, DOMPurify and lucide.

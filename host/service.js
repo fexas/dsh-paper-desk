@@ -12,6 +12,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { normalizeMindmap, normalizeProjectType, seedMindmap } from './mindmap.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = path.resolve(HERE, '..');
@@ -35,6 +36,10 @@ const REMOTE_METHOD_NAMES = [
   'renameProject',
   'deleteProject',
   'getProject',
+  'getMindmap',
+  'saveMindmap',
+  'mindmapChat',
+  'clearMindmapChat',
   'beginPaper',
   'beginAttachment',
   'putUploadChunk',
@@ -271,6 +276,19 @@ function relevantPaperText(text, question, page) {
   return out;
 }
 
+function mindmapNodeLine(node, max = 900) {
+  const kind = String(node?.data?.kind || 'note');
+  const title = String(node?.data?.title || 'Untitled node');
+  const body = String(node?.data?.markdown || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  return `- [${kind}] ${title}${body ? `：${body}` : ''}`;
+}
+
+function mindmapPaperLine(paper) {
+  const authors = Array.isArray(paper.authors) && paper.authors.length ? paper.authors.slice(0, 3).join(', ') : '';
+  const meta = [authors, paper.year, paper.tags?.length ? `tags: ${paper.tags.join(', ')}` : ''].filter(Boolean).join(' · ');
+  return `- ${paper.title}${meta ? `（${meta}）` : ''}${paper.notesPreview ? ` — ${paper.notesPreview.slice(0, 220)}` : ''}`;
+}
+
 export class PaperDeskService extends TypertRemoteService {
   static inject = ['llm'];
 
@@ -335,6 +353,7 @@ export class PaperDeskService extends TypertRemoteService {
     return {
       id: String(meta.id),
       name: String(meta.name || '未命名项目'),
+      type: normalizeProjectType(meta.type),
       folder: path.basename(dir),
       createdAt: meta.createdAt || now(),
       updatedAt: meta.updatedAt || meta.createdAt || now(),
@@ -364,6 +383,13 @@ export class PaperDeskService extends TypertRemoteService {
       annotations: path.join(dir, 'annotations.json'),
       chat: path.join(dir, 'chat.json'),
       attachments: path.join(dir, 'attachments'),
+    };
+  }
+
+  mindmapPaths(projectDirValue) {
+    return {
+      map: path.join(projectDirValue, 'mindmap.json'),
+      chat: path.join(projectDirValue, 'mindmap-chat.json'),
     };
   }
 
@@ -411,6 +437,7 @@ export class PaperDeskService extends TypertRemoteService {
     return {
       id: meta.id,
       name: meta.name,
+      type: normalizeProjectType(meta.type),
       folder: path.basename(dir),
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
@@ -456,9 +483,10 @@ export class PaperDeskService extends TypertRemoteService {
     return { projects, root: this.root };
   }
 
-  async createProject(name) {
+  async createProject(name, type) {
     const clean = clampText(name, 100).trim();
     if (!clean) throw new Error('项目名称不能为空');
+    const projectType = normalizeProjectType(type);
     const base = slugify(clean, 'project');
     const folder = uniqueChild(this.root, base, true);
     const dir = path.join(this.root, folder);
@@ -466,6 +494,7 @@ export class PaperDeskService extends TypertRemoteService {
     const meta = {
       id: `prj-${rand(6)}`,
       name: clean,
+      type: projectType,
       createdAt: now(),
       updatedAt: now(),
       papers: [],
@@ -506,6 +535,155 @@ export class PaperDeskService extends TypertRemoteService {
       .map((paper) => this.paperSummary(dir, paper, true));
     const summary = this.projectSummary(dir, meta);
     return { ...summary, papers, root: this.root };
+  }
+
+  // ---------------------------------------------------------------- mindmap
+
+  async getMindmap(projectId) {
+    const { dir, meta } = this.loadProject(projectId);
+    const projectType = normalizeProjectType(meta.type);
+    if (meta.type !== projectType) {
+      meta.type = projectType;
+      this.saveProject(dir, meta);
+    }
+    const files = this.mindmapPaths(dir);
+    let raw = readJson(files.map, null);
+    if (!raw) {
+      raw = seedMindmap({ ...meta, type: projectType });
+      writeJson(files.map, raw);
+    }
+    const map = normalizeMindmap(raw, { ...meta, type: projectType });
+    const chat = readJson(files.chat, { version: 1, messages: [] });
+    const papers = (meta.papers || [])
+      .slice()
+      .sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)))
+      .map((paper) => this.paperSummary(dir, paper, true));
+    return {
+      project: this.projectSummary(dir, meta),
+      papers,
+      map,
+      chat: Array.isArray(chat.messages) ? chat.messages : [],
+    };
+  }
+
+  async saveMindmap(projectId, mapJson) {
+    let incoming = mapJson;
+    if (typeof mapJson === 'string') {
+      try { incoming = JSON.parse(mapJson); } catch { throw new Error('脑图数据格式错误'); }
+    }
+    const { dir, meta } = this.loadProject(projectId);
+    const map = normalizeMindmap(incoming, meta);
+    map.updatedAt = now();
+    const files = this.mindmapPaths(dir);
+    writeJson(files.map, map);
+    meta.updatedAt = now();
+    this.saveProject(dir, meta);
+    return { savedAt: now(), map };
+  }
+
+  async mindmapChat(projectId, text, selectedNodeIdsJson) {
+    const question = clampText(text, 12_000).trim();
+    if (!question) throw new Error('请输入问题');
+    const key = `mindmap:${projectId}`;
+    if (this.chatJobs.has(key)) throw new Error('上一条脑图对话还在生成，请稍等');
+    const job = (async () => {
+      const { dir, meta } = this.loadProject(projectId);
+      const files = this.mindmapPaths(dir);
+      let raw = readJson(files.map, null);
+      if (!raw) {
+        raw = seedMindmap(meta);
+        writeJson(files.map, raw);
+      }
+      const map = normalizeMindmap(raw, meta);
+      const store = readJson(files.chat, { version: 1, messages: [] });
+      const history = Array.isArray(store.messages) ? store.messages : [];
+      let selectedIds = [];
+      try {
+        const parsed = typeof selectedNodeIdsJson === 'string' ? JSON.parse(selectedNodeIdsJson) : selectedNodeIdsJson;
+        selectedIds = Array.isArray(parsed) ? parsed.map(String) : [];
+      } catch { /* ignore */ }
+      const selected = map.nodes.filter((node) => selectedIds.includes(node.id));
+      const papers = (meta.papers || []).map((paper) => this.paperSummary(dir, paper, true));
+      const type = normalizeProjectType(meta.type);
+      const isLearning = type === 'learning';
+      const graph = [
+        '## 当前脑图结构',
+        ...map.nodes.slice(0, 90).map((node) => mindmapNodeLine(node)),
+        map.edges.length ? '\n## 连线' : '',
+        ...map.edges.slice(0, 120).map((edge) => {
+          const source = map.nodes.find((node) => node.id === edge.source)?.data?.title || edge.source;
+          const target = map.nodes.find((node) => node.id === edge.target)?.data?.title || edge.target;
+          return `- ${source} → ${target}`;
+        }),
+      ].filter(Boolean).join('\n');
+      const selectedContext = selected.length
+        ? ['\n## 用户当前选中的节点', ...selected.map((node) => `### ${node.data.title}（${node.data.kind}）\n${String(node.data.markdown || '').slice(0, 6000)}`)].join('\n')
+        : '';
+      const system = isLearning ? [
+        '你是 DeepSeek，一位擅长建立学习路线和检索练习的学习教练。',
+        '用户正在用一张脑图梳理某个学习方向。请基于脑图、论文库和选中的节点回答。',
+        '重点帮助：拆分概念依赖、解释难点、整理发展脉络、设计主动回忆与练习、指出缺失的前置知识。',
+        '不要编造论文中没有的内容；引用论文时使用论文库里的标题。用中文回答，保留必要的英文术语。',
+        '可以提出具体的节点修改建议，但不要假装已经替用户修改了脑图。',
+      ].join('\n') : [
+        '你是 DeepSeek，一位严谨的研究策略搭档。',
+        '用户正在用一张脑图组织一个研究工作区。请基于脑图、论文库和选中的节点回答。',
+        '重点帮助：把模糊的想法收敛成 research problem 和假设，检查方法与主张之间是否闭合，',
+        '找出缺少的 baseline / benchmark / ablation / confounder，提出可执行的下一步实验，',
+        '并把不同论文的方法、限制和结论连接起来。',
+        '不要编造论文中没有的内容；引用论文时使用论文库里的标题。用中文回答，保留必要的英文术语。',
+        '可以提出具体的节点或连线增删建议，但不要假装已经替用户修改了脑图。',
+      ].join('\n');
+      const prompt = [
+        `项目：${meta.name}（${isLearning ? '学习型' : '研究型'}）`,
+        graph,
+        papers.length ? `\n## 论文库（${papers.length} 篇）\n${papers.map(mindmapPaperLine).join('\n')}` : '\n## 论文库\n（暂无论文）',
+        selectedContext,
+        `\n## 用户问题\n${question}`,
+        '\n请优先给出清晰、具体、可操作的思考；必要时用 Markdown 表格、列表或公式。',
+      ].join('\n');
+      const userMessage = {
+        id: `mmsg-${rand(5)}`,
+        role: 'user',
+        content: question,
+        nodeIds: selected.map((node) => node.id),
+        createdAt: now(),
+      };
+      const llmMessages = [];
+      for (const message of history.slice(-16)) {
+        if (message.role !== 'user' && message.role !== 'assistant') continue;
+        const content = [{ type: 'text', text: String(message.content || '').slice(0, 8000) }];
+        if (message.role === 'user') {
+          llmMessages.push(createUserMessage({ content, source: { kind: 'user' } }));
+        } else {
+          llmMessages.push(createAssistantMessage({
+            content,
+            source: { kind: 'model', provider: 'paper-desk', model: 'history' },
+          }));
+        }
+      }
+      llmMessages.push(createUserMessage({ content: [{ type: 'text', text: prompt }], source: { kind: 'user' } }));
+      const { answer } = await this.complete({ system, messages: llmMessages, maxTokens: 5000, temperature: 0.45 });
+      const assistantMessage = {
+        id: `mmsg-${rand(5)}`,
+        role: 'assistant',
+        content: answer,
+        createdAt: now(),
+      };
+      store.version = 1;
+      store.messages = [...history, userMessage, assistantMessage].slice(-120);
+      writeJson(files.chat, store);
+      return { messages: store.messages, answer, userMessage, assistantMessage };
+    })().finally(() => this.chatJobs.delete(key));
+    this.chatJobs.set(key, job);
+    return job;
+  }
+
+  async clearMindmapChat(projectId) {
+    const { dir } = this.loadProject(projectId);
+    const files = this.mindmapPaths(dir);
+    writeJson(files.chat, { version: 1, messages: [] });
+    return { ok: true };
   }
 
   // ---------------------------------------------------------------- uploads

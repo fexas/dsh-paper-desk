@@ -10,6 +10,10 @@ Third-party software bundled into `client.js`:
   https://katex.org
   KaTeX CSS and the woff2 font files are inlined so formulas render consistently
   without a CDN or a separate asset route.
+- @xyflow/react (React Flow) 12.12.1 — MIT
+  https://reactflow.dev
+- @dagrejs/dagre 3.1.3 — MIT
+  https://github.com/dagrejs/dagre
 - marked — MIT
 - DOMPurify — Apache-2.0 OR MPL-2.0
 - lucide-react — ISC
