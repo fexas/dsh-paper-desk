@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="pd-paper" x1="12" y1="8" x2="48" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F8FB"/>
+      <stop offset="1" stop-color="#DDE3F2"/>
+    </linearGradient>
+    <linearGradient id="pd-accent" x1="20" y1="44" x2="45" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4D6BFE"/>
+      <stop offset="1" stop-color="#8A5CF6"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="15" fill="#0F1220"/>
+  <path d="M18 14h20.5L47 22.5V50a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4Z" fill="url(#pd-paper)"/>
+  <path d="M38 14v7a2 2 0 0 0 2 2h7" fill="#B8C3DF"/>
+  <path d="M21 30h16M21 36h13M21 42h9" stroke="#76829E" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="m40.5 41.5 2.2 5.3 5.3 2.2-5.3 2.2-2.2 5.3-2.2-5.3-5.3-2.2 5.3-2.2 2.2-5.3Z" fill="url(#pd-accent)"/>
+  <circle cx="48.5" cy="31" r="2.2" fill="#4D6BFE"/>
+</svg>
