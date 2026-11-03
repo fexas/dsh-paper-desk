@@ -1,5 +1,7 @@
 # Paper Desk · 论文工作台
 
+[![build](https://github.com/fexas/dsh-paper-desk/actions/workflows/ci.yml/badge.svg)](https://github.com/fexas/dsh-paper-desk/actions/workflows/ci.yml)
+
 A Zotero-shaped paper desk for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 It adds a **Papers** entry to the DSH sidebar and a three-pane reader to the
 main panel: the normal DSH sidebar on the left, the PDF in the middle, and a

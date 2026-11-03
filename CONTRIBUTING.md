@@ -33,3 +33,19 @@ Please include:
 - PDF page count and approximate size (do not attach private papers)
 - Browser console errors, if any
 - Whether the issue reproduces on a fresh project
+
+
+## Release checklist
+
+1. Update `CHANGELOG.md` and the version in `package.json`.
+2. Run `npm ci && npm run check && npm run build`.
+3. Commit, tag `vX.Y.Z`, and push both the branch and the tag.
+4. Create a GitHub release from the tag. Attach the `npm pack` tarball if the
+   release should be installable without cloning.
+
+## DSH compatibility
+
+Paper Desk targets the current DSH **0.2.x** line and follows the public
+Client-slot and Typert Remote contracts. When DSH changes those contracts,
+update the `peerDependencies` range in `package.json` and validate with a fresh
+profile before releasing.
